@@ -1,24 +1,35 @@
-from fastapi import FastAPI, WebSocket
+# app/main.py
+from fastapi import FastAPI, HTTPException
 from app.database import get_db_connection
-from app.websocket import WebSocketManager
 
 app = FastAPI()
-websocket_manager = WebSocketManager()
 
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket_manager.connect(websocket)
-    try:
-        while True:
-            data = await websocket.receive_json()
-            # Procesar el mensaje y enviar respuesta
-            await websocket_manager.send_message({"message": "Data received", "data": data})
-    except:
-        await websocket_manager.disconnect(websocket)
-
-@app.get("/reservations")
-async def get_reservations():
+# Ruta para crear una nueva reserva
+@app.post("/create")
+async def create_reservation(customer_id: int, restaurant_id: int, date: str, time: str, guests: int):
     connection = await get_db_connection()
-    reservations = await connection.fetch("SELECT * FROM Reservations;")
-    await connection.close()
-    return reservations
+    try:
+        # Comprobar si la reserva ya existe para el mismo cliente, restaurante, fecha y hora
+        check_query = """
+        SELECT COUNT(*) FROM Reservations 
+        WHERE CustomerID = $1 AND RestaurantID = $2 AND Date = $3 AND Time = $4;
+        """
+        exists = await connection.fetchval(check_query, customer_id, restaurant_id, date, time)
+        
+        if exists > 0:
+            raise HTTPException(status_code=400, detail="Reservation already exists for the given customer, restaurant, date, and time.")
+        
+        # Insertar la nueva reserva
+        insert_query = """
+        INSERT INTO Reservations (CustomerID, RestaurantID, Date, Time, Guests)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING ReservationID;
+        """
+        reservation_id = await connection.fetchval(insert_query, customer_id, restaurant_id, date, time, guests)
+        
+        # Responder con un mensaje de éxito
+        return {"message": "Reservation created successfully", "reservation_id": reservation_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {e}")
+    finally:
+        await connection.close()
