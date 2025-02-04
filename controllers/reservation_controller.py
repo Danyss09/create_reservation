@@ -1,26 +1,15 @@
-from flask import Blueprint, request, jsonify
-import requests
-from models.reservation_model import create_reservation
+from sqlalchemy.orm import Session
+from models.reservation import Reservation
+from datetime import datetime
 
-reservation_bp = Blueprint('reservation', __name__)
-
-CUSTOMER_SERVICE_URL = "http://localhost:5000/get_customer"
-
-@reservation_bp.route('/create_reservation', methods=['POST'])
-def create_reservation_route():
-    data = request.json
-    
-    # Validar si CustomerID existe en el microservicio de Customer
-    response = requests.get(f"{CUSTOMER_SERVICE_URL}/{data['CustomerID']}")
-    if response.status_code != 200:
-        return jsonify({"error": "Customer not found"}), 400
-
-    # Crear la reserva
-    response = create_reservation(
-        data['CustomerID'],
-        data['TableID'],
-        data['RestaurantID'],
-        data['ReservationTime']
+def create_reservation(db: Session, customer_id: int, table_id: int, reservation_time: str):
+    new_reservation = Reservation(
+        customer_id=customer_id,
+        table_id=table_id,
+        reservation_time=datetime.fromisoformat(reservation_time),
+        status="pending"
     )
-
-    return jsonify(response)
+    db.add(new_reservation)
+    db.commit()
+    db.refresh(new_reservation)
+    return new_reservation
