@@ -1,0 +1,24 @@
+version: "3.8"
+
+services:
+  db:
+    image: mysql:5.7
+    restart: always
+    environment:
+      MYSQL_DATABASE: reservation_db
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+      MYSQL_ROOT_PASSWORD: rootpassword
+    ports:
+      - "3306:3306"
+
+  create-reservation-service:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: "mysql+mysqlconnector://user:password@db/reservation_db"
+      CUSTOMER_SERVICE_URL: "http://customer-service:8001"
+      TABLE_SERVICE_URL: "http://table-service:8002"
